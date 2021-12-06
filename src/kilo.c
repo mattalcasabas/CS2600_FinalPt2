@@ -219,6 +219,19 @@ int getWindowSize(int *rows, int *cols)
 
 /*** row operations ***/
 
+int editorRowCxToRx(erow *row, int cx)
+{
+   int rx = 0;
+   int j;
+   for (j = 0; j < cx; j++)
+   {
+      if (row->chars[j] == '\t')
+         rx += (KILO_TAB_STOP - 1) - (rx % KILO_TAB_STOP);
+      rx++;
+   }
+   return rx;
+}
+
 void editorUpdateRow(erow *row)
 {
    int tabs = 0;
@@ -315,7 +328,11 @@ void abFree(struct abuf *ab)
 
 void editorScroll()
 {
-   E.rx = E.cx;
+   E.rx = 0;
+   if (E.cy < E.numrows)
+   {
+      E.rx = editorRowCxToRx(&E.row[E.cy], E.cx);
+   }
 
    if (E.cy < E.rowoff)
    {
@@ -476,6 +493,16 @@ void editorProcessKeypress()
    case PAGE_UP:
    case PAGE_DOWN:
    {
+      if (c == PAGE_UP)
+      {
+         E.cy = E.rowoff;
+      }
+      else if (c == PAGE_DOWN)
+      {
+         E.cy = E.rowoff + E.screenrows - 1;
+         if (E.cy > E.numrows)
+            E.cy = E.numrows;
+      }
       int times = E.screenrows;
       while (times--)
          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
