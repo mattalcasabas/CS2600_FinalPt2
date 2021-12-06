@@ -247,6 +247,21 @@ int editorRowCxToRx(erow *row, int cx)
    return rx;
 }
 
+int editorRowRxToCx(erow *row, int rx)
+{
+   int cur_rx = 0;
+   int cx;
+   for (cx = 0; cx < row->size; cx++)
+   {
+      if (row->chars[cx] == '\t')
+         cur_rx += (KILO_TAB_STOP - 1) - (cur_rx % KILO_TAB_STOP);
+      cur_rx++;
+      if (cur_rx > rx)
+         return cx;
+   }
+   return cx;
+}
+
 void editorUpdateRow(erow *row)
 {
    int tabs = 0;
@@ -280,7 +295,6 @@ void editorInsertRow(int at, char *s, size_t len)
       return;
    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
    memmove(&E.row[at + 1], &E.row[at], sizeof(erow) * (E.numrows - at));
-   int at = E.numrows;
    E.row[at].size = len;
    E.row[at].chars = malloc(len + 1);
    memcpy(E.row[at].chars, s, len);
@@ -470,6 +484,29 @@ void editorSave()
    editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
+/*** find ***/
+
+void editorFind()
+{
+   char *query = editorPrompt("Search: %s (ESC to cancel)");
+   if (query == NULL)
+      return;
+   int i;
+   for (i = 0; i < E.numrows; i++)
+   {
+      erow *row = &E.row[i];
+      char *match = strstr(row->render, query);
+      if (match)
+      {
+         E.cy = i;
+         E.cx = match - row->render;
+         E.rowoff = E.numrows;
+         break;
+      }
+   }
+   free(query);
+}
+
 /*** append buffer ***/
 
 struct abuf
@@ -555,12 +592,6 @@ void editorDrawRows(struct abuf *ab)
          {
             abAppend(ab, "~", 1);
          }
-
-         abAppend(ab, "\x1b[K", 3);
-         if (y < E.screenrows - 1)
-         {
-            abAppend(ab, "\r\n", 2);
-         }
       }
       else
       {
@@ -571,6 +602,7 @@ void editorDrawRows(struct abuf *ab)
             len = E.screencols;
          abAppend(ab, &E.row[filerow].render[E.coloff], len);
       }
+
       abAppend(ab, "\x1b[K", 3);
       abAppend(ab, "\r\n", 2);
    }
@@ -618,10 +650,12 @@ void editorDrawMessageBar(struct abuf *ab)
 void editorRefreshScreen()
 {
    editorScroll();
+
    struct abuf ab = ABUF_INIT;
 
    abAppend(&ab, "\x1b[?25l", 6);
    abAppend(&ab, "\x1b[H", 3);
+
    editorDrawRows(&ab);
    editorDrawStatusBar(&ab);
    editorDrawMessageBar(&ab);
